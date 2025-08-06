@@ -1,0 +1,5 @@
+# Crush logs and db
+.crush
+
+# binary
+crypto-api

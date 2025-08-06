@@ -1,216 +1,76 @@
-# Riot Take-Home Technical Challenge
+# Crypto API
 
-## Overview
+A minimal Go HTTP API for encryption (default: Base64 encoding/decoding), HMAC signing, and verification of JSON payloads.
 
-This challenge requires you to build an HTTP API with 4 endpoints that handle JSON payloads for encryption, decryption, signing, and verification operations.
+## Features
 
-## Requirements
+- **/encrypt**: POST any JSON to receive an object with all depth-1 properties Base64 encoded.
+- **/decrypt**: POST a previously encoded JSON to decode depth-1 fields, restoring the original JSON.
+- **/sign**: POST any JSON and get an HMAC signature (deterministic for logically equivalent objects).
+- **/verify**: POST `{signature, data}` to verify its HMAC; succeeds (204) or fails (400).
 
-### 1. Encryption Endpoint (`/encrypt`)
+See the [OpenAPI spec](api/openapi.yaml) for detailed schemas, input/output, and example payloads. You can also use an [online editor](https://editor.swagger.io/) for a more human readable documentation.
 
-- **Method**: POST
-- **Input**: Any JSON payload
-- **Output**: JSON payload with all properties at depth 1 encrypted
-- **Encryption Algorithm**: Base64 (for simplicity)
+## Quick Start
 
-**Example**:
+### Requirements
+- [Go 1.24+](https://golang.org/dl/)
 
-Input:
+### Building
 
-```json
-{
-  "name": "John Doe",
-  "age": 30,
-  "contact": {
-    "email": "john@example.com",
-    "phone": "123-456-7890"
-  }
-}
+```bash
+make build   # builds a static binary (crypto-api)
 ```
 
-Output:
+### Running Locally
 
-```json
-{
-  "name": "Sm9obiBEb2U=",
-  "age": "MzA=",
-  "contact": "eyJlbWFpbCI6ImpvaG5AZXhhbXBsZS5j..."
-}
+```bash
+make run     # runs main.go
+# or
+./crypto-api # after build (default port 3000)
 ```
 
-### 2. Decryption Endpoint (`/decrypt`)
+### Running via Docker
 
-- **Method**: POST
-- **Input**: Any JSON payload
-- **Output**: Original JSON payload with decrypted values. If some properties contain values which were not encrypted, they must remain unchanged.
-- **Decryption Algorithm**: Base64 (for simplicity)
-
-**Examples**:
-
-Using the output from the `/encrypt` example as input should return the original payload:
-
-Input:
-
-```json
-{
-  "name": "Sm9obiBEb2U=",
-  "age": "MzA=",
-  "contact": "eyJlbWFpbCI6ImpvaG5AZXhhbXBsZS5j..."
-}
+```bash
+docker build -t crypto-api .
+docker run -p 3000:3000 crypto-api
 ```
 
-Output:
+## Configuration
 
-```json
-{
-  "name": "John Doe",
-  "age": 30,
-  "contact": {
-    "email": "john@example.com",
-    "phone": "123-456-7890"
-  }
-}
+Configuration can be set via CLI flags or environment variables. **Flags always take priority over environment variables**. The following options are available:
+
+| Option         | CLI Flag      | Environment Variable         | Default  | Description                                       |
+|----------------|--------------|------------------------------|----------|---------------------------------------------------|
+| Port           | `-port`      | `CRYPTO_API_PORT`            | `3000`   | Port the server listens on                        |
+| Encryption Key | `-encrypt_key`       | `CRYPTO_API_ENCRYPTION_KEY`  | `secret` | Key used for encryption by the server |
+| Algorithm      | `-encrypt_alg`       | `CRYPTO_API_ENCRYPTION_ALGORITHM`             | `base64` | Algorithm to use: "base64" (default), "aesgcm", etc. |
+
+
+## Development
+
+- **Build:** `make build`
+- **Run:** `make run`
+- **Test:** `make test` or `go test ./...`
+- **Lint:** `golangci-lint run`
+- **Generate API code:** `make generate`
+
+## Repo Layout
+
+```bash
+.
+├── api/             # OpenAPI spec & generated API code 
+├── crypto/          # HMAC signing/verification implementations
+├── encoding/        # Base64 encode/decode logic
+├── http/            # HTTP handlers and service logic
+├── main.go          # Entrypoint 
+├── main_test.go     # Integration tests
+├── Dockerfile
+├── Makefile
+├── go.mod
+├── go.sum
 ```
 
-Unencrypted properties must remain unchanged:
-
-Input:
-
-```json
-{
-  "name": "Sm9obiBEb2U=",
-  "age": "MzA=",
-  "contact": "eyJlbWFpbCI6ImpvaG5AZXhhbXBsZS5j...",
-  "birth_date": "1998-11-19"
-}
-```
-
-Output:
-
-```json
-{
-  "name": "John Doe",
-  "age": 30,
-  "contact": {
-    "email": "john@example.com",
-    "phone": "123-456-7890"
-  },
-  "birth_date": "1998-11-19"
-}
-```
-
-### 3. Signing Endpoint (`/sign`)
-
-- **Method**: POST
-- **Input**: Any JSON payload
-- **Output**: JSON payload with a unique "signature" property
-- **Signature Algorithm**: HMAC
-- **Important Note**: The signature must be computed based on the value of the JSON payload, not its string representation. This means the order of properties should not affect the signature.
-
-**Examples**:
-
-Basic example for an object with two properties:
-
-Input:
-
-```json
-{
-  "message": "Hello World",
-  "timestamp": 1616161616
-}
-```
-
-Output:
-
-```json
-{
-  "signature": "a1b2c3d4e5f6g7h8i9j0..."
-}
-```
-
-The order of properties must not change the signature, which means this example will generate the same signature:
-
-Input:
-
-```json
-{
-  "timestamp": 1616161616,
-  "message": "Hello World"
-}
-```
-
-Output:
-
-```json
-{
-  "signature": "a1b2c3d4e5f6g7h8i9j0..."
-}
-```
-
-### 4. Verification Endpoint (`/verify`)
-
-- **Method**: POST
-- **Input**: JSON payload with "signature" and "data" properties
-- **Output**:
-  - HTTP 204 (No Content) if signature is valid
-  - HTTP 400 (Bad Request) if signature is invalid
-
-**Examples**:
-
-Basic example of an object with two properties:
-
-Input:
-
-```json
-{
-  "signature": "a1b2c3d4e5f6g7h8i9j0...",
-  "data": {
-    "message": "Hello World",
-    "timestamp": 1616161616
-  }
-}
-```
-
-Output: 204 HTTP response
-
-The same input object with the order of properties changed must produce the same signature:
-
-Input:
-
-```json
-{
-  "signature": "a1b2c3d4e5f6g7h8i9j0...",
-  "data": {
-    "timestamp": 1616161616,
-    "message": "Hello World"
-  }
-}
-```
-
-Output: 204 HTTP response
-
-Example when using a tampered signature or payload:
-
-Input:
-
-```json
-{
-  "signature": "a1b2c3d4e5f6g7h8i9j0...",
-  "data": {
-    "timestamp": 1616161616,
-    "message": "Goodbye World"
-  }
-}
-```
-
-Output: 400 HTTP response
-
-## Design Considerations
-
-1. **Abstraction**: The encryption algorithm (Base64) in the `/encrypt` and `/decrypt` endpoints should be easily replaceable with another algorithm without significant changes to the codebase. Design your solution with appropriate abstractions. The same principle applies to the signature algorithm used in the `/sign` and `/verify` endpoints.
-
-2. **Consistency**: Ensure that `/encrypt` followed by `/decrypt` returns the original payload. Ensure that a payload signed with `/sign` can be successfully verified with `/verify`.
-
-## Submission
-
-Please submit your completed project by sending your GitHub repository link to louis@tryriot.com.
+## Notes
+- All cryptography is for demonstration only. For production use, replace implementations with secure cryptographic algorithms and manage secrets appropriately.
